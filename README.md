@@ -32,14 +32,14 @@ Deployment Target はプロジェクトごとに設定できます。bootstrap �
 
 ## 開発環境
 
-- `.xcode-version` に記載した Xcode 26.6 と、macOS Tahoe 26.2 以降。[Xcode 26.6 リリースノート](https://developer.apple.com/documentation/xcode-release-notes/xcode-26_6-release-notes)
+- `.xcode-version` に記載した Xcode 27.2 と、macOS Tahoe 26.6 以降。[Xcode 27.2 リリースノート](https://developer.apple.com/documentation/xcode-release-notes/xcode-27_2-release-notes)
 - Xcode の Settings → Components で iOS Simulator ランタイムをインストールしてください。
 - mise と Python 3。Python は bootstrap とその回帰テストに使います。追加の Python パッケージは不要です。[mise セットアップ](https://mise.jdx.dev/getting-started.html)
 
 Xcode を起動して初回セットアップを済ませ、対象の Xcode を選択します。複数バージョンがある場合はインストール先に合わせてパスを変更してください。
 
 ```sh
-export DEVELOPER_DIR=/Applications/Xcode_26.6.app/Contents/Developer
+export DEVELOPER_DIR=/Applications/Xcode_27.2.app/Contents/Developer
 xcodebuild -version
 mise trust
 mise install
@@ -58,7 +58,7 @@ mise exec -- xcodegen generate
 - 名前とターゲットの対応は `name`、`targets`、`scheme.testTargets`、`dependencies` で管理します。内部名は二重引用符で囲みます。
 - 表示名は `INFOPLIST_KEY_CFBundleDisplayName`、アプリとテストの Bundle ID は各ターゲットの `PRODUCT_BUNDLE_IDENTIFIER` です。
 - 対応デバイスは `iOSDeviceFamily` の `TARGETED_DEVICE_FAMILY` で指定します。iPhone は `"1"`、Universal は `"1,2"` です。
-- 最低 OS は `options.deploymentTarget.iOS`、Swift の言語モードは `SWIFT_VERSION` で指定します。Xcode 26.6 の SDK は iOS 26.5 です。Deployment Target を変更するときは、使用する API、Xcode が対応する Deployment Target、Simulator ランタイムを確認してください。[Apple の SDK とシステム要件](https://developer.apple.com/xcode/system-requirements/)
+- 最低 OS は `options.deploymentTarget.iOS`、Swift の言語モードは `SWIFT_VERSION` で指定します。Xcode 27.2 の SDK は iOS 27.2 です。Deployment Target を変更するときは、使用する API、Xcode が対応する Deployment Target、Simulator ランタイムを確認してください。[Apple の SDK とシステム要件](https://developer.apple.com/xcode/system-requirements/)
 
 `com.example` 配下の Bundle ID は例示用です。実機配布や公開には、自分で管理する識別子と署名設定を使用してください。
 
