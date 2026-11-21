@@ -79,6 +79,7 @@ mise exec -- xcodegen generate
 - 対応デバイスは `iOSDeviceFamily` の `TARGETED_DEVICE_FAMILY` で指定します。iPhone は `"1"`、Universal は `"1,2"` です。
 - 最低 OS は `options.deploymentTarget.iOS`、Swift の言語モードは `SWIFT_VERSION` で指定します。Xcode 27.2 の SDK は iOS 27.2 です。Deployment Target を変更するときは、使用する API、Xcode が対応する Deployment Target、Simulator ランタイムを確認してください。[Apple の SDK とシステム要件](https://developer.apple.com/xcode/system-requirements/)
 - 実機で実行するときは、`settings.base` の `DEVELOPMENT_TEAM` に Apple Developer の Team ID を設定します。`.xcodeproj` は再生成されるため、Xcode の Signing & Capabilities で選んだチームは保持されません。
+- Xcode が **Update to recommended settings** を表示した場合は **Perform Changes** を実行せず、提案された設定を `project.yml` に反映して再生成します。Xcode を更新するときは、`.xcode-version` と `options.xcodeVersion` を同じバージョンに変更します。
 
 `com.example` 配下の Bundle ID は例示用です。実機配布や公開には、自分で管理する識別子と署名設定を使用してください。
 

@@ -25,4 +25,4 @@ GitHub Template Repository から SwiftUI アプリを繰り返し立ち上げ�
 - クローン後と `project.yml` を変えたときに再生成が必要になる。共有設定を Xcode の UI で試した場合は、プロジェクト定義へ反映する。
 - 依存が増えると Composition Root の組み立ても増える。機能分割や共通化は利用箇所が見えてから行う。
 - 永続化を導入するプロダクトは、ストレージ選定と移行テストを追加する。
-- Xcode のインストールと選択は手動で行う。Xcode を更新する際は同梱の swift-format と Simulator の互換性も確認する。
+- Xcode のインストールと選択は手動で行う。Xcode を更新する際は同梱の swift-format と Simulator の互換性も確認する。`.xcode-version` と `project.yml` の `options.xcodeVersion` を合わせて更新し、Xcode が提示する推奨設定は `project.yml` に反映する。
