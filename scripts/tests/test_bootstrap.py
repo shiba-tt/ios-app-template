@@ -32,8 +32,10 @@ class BootstrapTests(unittest.TestCase):
         for directory in ("App", "Tests", ".claude"):
             shutil.copytree(TEMPLATE / directory, self.repo / directory)
         for filename in ("project.yml", "README.md", "CLAUDE.md", "LICENSE",
-                         "scripts/bootstrap.sh", "scripts/bootstrap.py"):
+                         "scripts/bootstrap.sh", "scripts/bootstrap.py", "scripts/check.sh"):
             shutil.copy2(TEMPLATE / filename, self.repo / filename)
+        shutil.copytree(TEMPLATE / "scripts/tests", self.repo / "scripts/tests",
+                        ignore=shutil.ignore_patterns("__pycache__"))
 
         bin_dir = self.temporary_path / "bin"
         bin_dir.mkdir()
@@ -132,6 +134,7 @@ if mode == "fail":
         self.assertIn(f'INFOPLIST_KEY_CFBundleDisplayName: "{APP_NAME}"\n', project)
         self.assertIn('TARGETED_DEVICE_FAMILY: "1"\n', project)
         self.assertIn('iOS: "26.0"\n', project)
+        self.assertIn('DEVELOPMENT_TEAM: ""\n', project)
         self.assertIn(f"struct {APP_NAME}Entry: App", self.read("App/AppEntry.swift"))
 
         readme = self.read("README.md")
@@ -142,6 +145,11 @@ if mode == "fail":
             self.assertIn(BUNDLE_ID, document)
             self.assertIn("iOS 26.0", document)
             self.assertNotIn("com.example.starterapp", document)
+            # The template-only scripts are removed, so the app docs must not point to them.
+            self.assertNotIn("bootstrap", document)
+        for removed in ("scripts/bootstrap.sh", "scripts/bootstrap.py", "scripts/tests"):
+            self.assertFalse((self.repo / removed).exists(), removed)
+        self.assertTrue((self.repo / "scripts/check.sh").is_file())
         self.assertNotIn("StarterApp", project)
         for path, content in self.before.items():
             if path.parts[:2] == (".claude", "rules") and content is not None:
@@ -158,11 +166,13 @@ if mode == "fail":
             "platform": "universal",
             "deployment-target": "27.1",
             "display-name": DISPLAY_NAME,
+            "team-id": "ABCDE12345",
         })))
         project = self.read("project.yml")
         self.assertTrue(project.startswith('name: "TravelNotes"\n'))
         self.assertIn('TARGETED_DEVICE_FAMILY: "1,2"\n', project)
         self.assertIn('iOS: "27.1"\n', project)
+        self.assertIn('DEVELOPMENT_TEAM: "ABCDE12345"\n', project)
         display_value = re.search(r"INFOPLIST_KEY_CFBundleDisplayName: (.+)", project)[1]
         self.assertEqual(json.loads(display_value), DISPLAY_NAME)
         for filename in ("README.md", "CLAUDE.md"):
@@ -173,11 +183,12 @@ if mode == "fail":
     def test_interactive_defaults(self):
         bootstrap = self.load_bootstrap()
         with patch.object(sys, "argv", ["bootstrap.py"]), patch.object(sys.stdin, "isatty", return_value=True):
-            with patch("builtins.input", side_effect=[APP_NAME, "", BUNDLE_ID, "", ""]):
+            with patch("builtins.input", side_effect=[APP_NAME, "", BUNDLE_ID, "", "", ""]):
                 args = bootstrap.arguments()
         self.assertEqual(args.display_name, APP_NAME)
         self.assertEqual(args.platform, "iphone")
         self.assertEqual(args.deployment_target, "26.0")
+        self.assertIsNone(args.team_id)
 
     def test_accepts_deployment_target_format_and_writes_version(self):
         bootstrap = self.load_bootstrap()
@@ -199,6 +210,8 @@ if mode == "fail":
             ("app-name", "3 bad app", "--app-name must start"),
             ("bundle-id", "com..budgetmate", "--bundle-id must use reverse-DNS syntax"),
             ("platform", "ipad", "invalid choice"),
+            ("team-id", "abcde12345", "--team-id must be 10 uppercase"),
+            ("team-id", "ABCDE1234", "--team-id must be 10 uppercase"),
         ):
             with self.subTest(option=option):
                 self.assert_rejected(self.bootstrap(*self.options(**{option: value})), message)
@@ -207,9 +220,24 @@ if mode == "fail":
 
     def test_rejects_second_initialization(self):
         self.assert_success(self.bootstrap(*self.options()))
+        # Bootstrap removes itself, so restore it to check the completion marker guard.
+        for filename in ("scripts/bootstrap.sh", "scripts/bootstrap.py"):
+            shutil.copy2(TEMPLATE / filename, self.repo / filename)
         initialized = self.snapshot()
         self.assert_rejected(self.bootstrap(*self.options()), "already initialized")
         self.assertEqual(self.snapshot(), initialized)
+
+    @unittest.skipIf(os.geteuid() == 0, "root can delete files in a read-only directory")
+    def test_cleanup_failure_keeps_completed_initialization(self):
+        scripts = self.repo / "scripts"
+        scripts.chmod(0o555)
+        self.addCleanup(scripts.chmod, 0o755)
+        result = self.bootstrap(*self.options())
+        self.assert_success(result)
+        self.assertIn("could not remove template files", result.stderr)
+        self.assertEqual(self.read(".bootstrap-complete"), "initialized\n")
+        self.assertTrue((self.repo / PROJECT_NAME / "project.pbxproj").is_file())
+        self.assertTrue((scripts / "bootstrap.py").is_file())
 
     def test_refuses_existing_transaction_or_project(self):
         for directory, message in (

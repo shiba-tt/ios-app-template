@@ -16,7 +16,13 @@ ROOT = Path(__file__).resolve().parent.parent
 COMPLETE = ROOT / ".bootstrap-complete"
 TRANSACTION = ROOT / ".bootstrap-in-progress"
 EDITED_FILES = ("project.yml", "App/AppEntry.swift", "README.md", "CLAUDE.md")
+# Template maintenance files that an initialized app repository does not need.
+TEMPLATE_ONLY_FILES = ("scripts/bootstrap.sh", "scripts/bootstrap.py", "scripts/tests")
 DEVICE_FAMILIES = {"iphone": "1", "universal": "1,2"}
+INTERRUPTED = (
+    "Initialization is in progress or was interrupted. "
+    "See README.md, or .bootstrap-in-progress/backup/README.md, for recovery."
+)
 
 
 def arguments():
@@ -24,8 +30,9 @@ def arguments():
         description="Initialize an app repository created from ios-app-template.",
         epilog=(
             "Run without options for interactive mode. For unattended use, supply --app-name, "
-            "--bundle-id, --platform, and --deployment-target. "
-            "Use a bundle ID you control for release. com.example IDs are examples only."
+            "--bundle-id, --platform, and --deployment-target. --team-id is optional. "
+            "Use a bundle ID you control for release. com.example IDs are examples only. "
+            "After initialization, the bootstrap scripts and their tests are removed."
         ),
         allow_abbrev=False,
     )
@@ -34,6 +41,7 @@ def arguments():
     parser.add_argument("--bundle-id", help="Reverse-DNS bundle identifier")
     parser.add_argument("--platform", choices=DEVICE_FAMILIES, help="Device family")
     parser.add_argument("--deployment-target", help="Minimum iOS version, e.g. 26.0")
+    parser.add_argument("--team-id", help="Apple Developer Team ID for device builds (optional)")
     args = parser.parse_args()
     ensure_uninitialized()
 
@@ -45,6 +53,7 @@ def arguments():
         args.bundle_id = input("Bundle ID (e.g. com.yourcompany.budgetmate): ").strip()
         args.platform = input("Device family (iphone/universal) [iphone]: ").strip() or "iphone"
         args.deployment_target = input("Minimum iOS version [26.0]: ").strip() or "26.0"
+        args.team_id = input("Team ID for device builds (optional): ").strip() or None
 
     if not re.fullmatch(r"[A-Za-z][A-Za-z0-9]{0,39}", args.app_name or ""):
         parser.error("--app-name must start with an ASCII letter and use 1–40 ASCII letters or digits.")
@@ -65,6 +74,8 @@ def arguments():
         parser.error(
             "--deployment-target must use major.minor, with a positive major and no leading zeros (e.g. 26.0)."
         )
+    if args.team_id is not None and not re.fullmatch(r"[A-Z0-9]{10}", args.team_id):
+        parser.error("--team-id must be 10 uppercase ASCII letters or digits, e.g. ABCDE12345.")
     return args
 
 
@@ -72,7 +83,7 @@ def ensure_uninitialized():
     if COMPLETE.exists():
         raise ValueError("This repository is already initialized. Edit project.yml to change app settings.")
     if TRANSACTION.exists():
-        raise ValueError("Initialization is in progress or was interrupted. See README.md for recovery.")
+        raise ValueError(INTERRUPTED)
 
 
 def replace_exact(content, old, new, expected=1):
@@ -104,6 +115,7 @@ def update_project(content, args):
     content = replace_exact(
         content, 'TARGETED_DEVICE_FAMILY: "1"', f'TARGETED_DEVICE_FAMILY: "{DEVICE_FAMILIES[args.platform]}"'
     )
+    content = replace_exact(content, 'DEVELOPMENT_TEAM: ""', f'DEVELOPMENT_TEAM: "{args.team_id or ""}"')
     return replace_exact(
         content, placeholder,
         "INFOPLIST_KEY_CFBundleDisplayName: " + json.dumps(args.display_name, ensure_ascii=False),
@@ -165,13 +177,30 @@ def publish(stage, project):
         raise
 
 
+def remove_template_files():
+    # Initialization is complete at this point, so a failure only leaves files to delete by hand.
+    try:
+        for relative in TEMPLATE_ONLY_FILES:
+            path = ROOT / relative
+            if path.is_dir() and not path.is_symlink():
+                shutil.rmtree(path)
+            else:
+                path.unlink(missing_ok=True)
+    except OSError as error:
+        remaining = ", ".join(name for name in TEMPLATE_ONLY_FILES if (ROOT / name).exists())
+        print(
+            f"Warning: could not remove template files ({error}). Delete them manually: {remaining}",
+            file=sys.stderr,
+        )
+
+
 def initialize(args):
     if shutil.which("xcodegen") is None:
         raise ValueError("xcodegen is missing. Run mise install, then mise exec -- ./scripts/bootstrap.sh.")
     try:
         TRANSACTION.mkdir()
     except FileExistsError:
-        raise ValueError("Initialization is in progress or was interrupted. See README.md for recovery.") from None
+        raise ValueError(INTERRUPTED) from None
 
     stage = TRANSACTION / "stage"
     project = ROOT / f"{args.app_name}.xcodeproj"
@@ -199,6 +228,7 @@ def initialize(args):
     # A failed rollback leaves the transaction and original files available for recovery.
     publish(stage, project)
     shutil.rmtree(TRANSACTION)
+    remove_template_files()
 
     if args.bundle_id.lower() == "com.example" or args.bundle_id.lower().startswith("com.example."):
         print("Note: com.example is reserved for examples. Use your own bundle ID for release.")

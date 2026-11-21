@@ -10,7 +10,8 @@ GitHub Template Repository から SwiftUI アプリを繰り返し立ち上げ�
 
 ## Decision
 
-- Xcode のプロジェクトと共有スキームは XcodeGen で生成する。ターゲット、依存、ビルド設定を YAML でレビューでき、bootstrap でアプリ固有の設定を更新できる。
+- Xcode のプロジェクトと共有スキームは XcodeGen で生成する。ターゲット、依存、ビルド設定を YAML でレビューでき、bootstrap でアプリ固有の設定を更新できる。bootstrap は初期化の完了後に自身と回帰テストを削除し、アプリのリポジトリにテンプレートの保守用ファイルを残さない。
+- 署名の Team ID は `project.yml` の `DEVELOPMENT_TEAM` で管理する。`.xcodeproj` は再生成するため、Xcode の画面で選んだチームは保持されない。Team ID は秘密情報ではないため、プロジェクト定義に含めてよい。
 - Feature-first と軽量 MVVM を組み合わせる。小さな機能のコードを一箇所で追え、状態管理が複雑になったときに Observation の ViewModel を加えられる。
 - 依存は Composition Root で組み立て、Initializer Injection で渡す。SwiftUI Environment は共有状態に限って使う。外部 DI ライブラリを追加するコストに見合う登録やライフサイクル管理は初期段階では必要ない。
 - 永続化はプロダクトのデータ量、同期、移行要件が判明してから選ぶ。初期段階でデータモデルや移行方針を拘束しない。
