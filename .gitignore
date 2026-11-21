@@ -1,0 +1,6 @@
+.DS_Store
+*.xcodeproj/
+DerivedData/
+*.xcresult/
+.bootstrap-in-progress/
+__pycache__/
