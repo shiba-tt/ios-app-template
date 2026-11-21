@@ -24,7 +24,9 @@
 
 3. 生成された `.xcodeproj` を開き、[ビルドとテスト](#ビルドとテスト)を実施します。設定変更と `.bootstrap-complete` をコミットします。
 
-`--app-name` は Xcode の内部名です。画面上のアイコンラベルには `--display-name` を使います。省略時は内部名が使われます。対応デバイスは `iphone` または `universal`（iPhone と iPad）、Deployment Target は `major.minor` 形式です。対話モードでは iPhone と 26.0 が既定値です。全オプションは `./scripts/bootstrap.sh --help` で確認できます。
+`--app-name` は Xcode の内部名です。画面上のアイコンラベルには `--display-name` を使います。省略時は内部名が使われます。対応デバイスは `iphone` または `universal`（iPhone と iPad）です。対話モードでは iPhone と iOS 26.0 が既定値です。全オプションは `./scripts/bootstrap.sh --help` で確認できます。
+
+Deployment Target はプロジェクトごとに設定できます。bootstrap は `major.minor` 形式を受け付けます。major は正の整数、minor は 0 以上の整数で、各数値を先頭の 0 で桁埋めしません。`27.0` のような値も指定できます。指定したバージョンで開発するには、対応する Xcode、SDK、Simulator ランタイムを用意し、ビルドとテストで確認してください。
 
 初期化では、設定と Xcode プロジェクトを一時領域で準備し、生成に成功してから反映します。同じ名前の `.xcodeproj` がすでにある場合は、別の場所に移動してから実行してください。初期化済みのリポジトリでは、以後の設定変更を `project.yml` で行います。
 
@@ -32,7 +34,7 @@
 
 - `.xcode-version` に記載した Xcode 26.6 と、macOS Tahoe 26.2 以降。[Xcode 26.6 リリースノート](https://developer.apple.com/documentation/xcode-release-notes/xcode-26_6-release-notes)
 - Xcode の Settings → Components で iOS Simulator ランタイムをインストールしてください。
-- [mise](https://mise.jdx.dev/getting-started.html) と Python 3。Python は bootstrap のみに使い、追加パッケージは不要です。
+- mise と Python 3。Python は bootstrap とその回帰テストに使います。追加の Python パッケージは不要です。[mise セットアップ](https://mise.jdx.dev/getting-started.html)
 
 Xcode を起動して初回セットアップを済ませ、対象の Xcode を選択します。複数バージョンがある場合はインストール先に合わせてパスを変更してください。
 
@@ -56,7 +58,7 @@ mise exec -- xcodegen generate
 - 名前とターゲットの対応は `name`、`targets`、`scheme.testTargets`、`dependencies` で管理します。内部名は二重引用符で囲みます。
 - 表示名は `INFOPLIST_KEY_CFBundleDisplayName`、アプリとテストの Bundle ID は各ターゲットの `PRODUCT_BUNDLE_IDENTIFIER` です。
 - 対応デバイスは `iOSDeviceFamily` の `TARGETED_DEVICE_FAMILY` で指定します。iPhone は `"1"`、Universal は `"1,2"` です。
-- 最低 OS は `options.deploymentTarget.iOS`、Swift の言語モードは `SWIFT_VERSION` で指定します。OS の下限を変えるときは、使用する API と Simulator ランタイムも確認してください。
+- 最低 OS は `options.deploymentTarget.iOS`、Swift の言語モードは `SWIFT_VERSION` で指定します。Xcode 26.6 の SDK は iOS 26.5 です。Deployment Target を変更するときは、使用する API、Xcode が対応する Deployment Target、Simulator ランタイムを確認してください。[Apple の SDK とシステム要件](https://developer.apple.com/xcode/system-requirements/)
 
 `com.example` 配下の Bundle ID は例示用です。実機配布や公開には、自分で管理する識別子と署名設定を使用してください。
 
@@ -80,6 +82,16 @@ mise exec -- swiftlint lint --strict
 ```
 
 swift-format がレイアウトと表記を扱い、SwiftLint は強制キャストや不適切な初期化などを検出します。Swift Concurrency の診断は Swift 6 コンパイラに従います。
+
+### bootstrap の回帰テスト
+
+初期化前のテンプレートのチェックアウトで次のコマンドを実行します。テストはテンプレートを一時ディレクトリにコピーし、XcodeGen のスタブを使って初期化、入力エラー、失敗時の復旧を検証します。Python 3 で実行できます。
+
+```sh
+python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
+```
+
+実際のプロジェクト生成は、新規クローンで bootstrap を実行するか、既存の設定で `mise exec -- xcodegen generate` を実行して確認します。
 
 ## 構成
 

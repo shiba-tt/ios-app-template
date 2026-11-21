@@ -60,9 +60,11 @@ def arguments():
     if args.platform not in DEVICE_FAMILIES:
         parser.error("--platform must be iphone or universal.")
 
-    version = re.fullmatch(r"(1[5-8]|26)\.(0|[1-9][0-9]?)", args.deployment_target or "")
-    if not version or (version[1] == "26" and int(version[2]) > 5):
-        parser.error("--deployment-target must use major.minor, with iOS 15–18 or 26.0–26.5.")
+    # This checks the numeric form. SDK compatibility is checked when building with Xcode.
+    if not re.fullmatch(r"[1-9][0-9]*\.(?:0|[1-9][0-9]*)", args.deployment_target or ""):
+        parser.error(
+            "--deployment-target must use major.minor, with a positive major and no leading zeros (e.g. 26.0)."
+        )
     return args
 
 
