@@ -1,0 +1,10 @@
+included:
+  - App
+  - Tests
+only_rules:
+  - compiler_protocol_init
+  - duplicate_imports
+  - force_cast
+  - force_try
+  - redundant_discardable_let
+  - unused_closure_parameter
