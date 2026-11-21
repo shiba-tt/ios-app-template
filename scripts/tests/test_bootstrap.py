@@ -25,7 +25,8 @@ class BootstrapTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="ios-bootstrap-test-")
         self.addCleanup(temporary.cleanup)
-        self.temporary_path = Path(temporary.name)
+        # Match bootstrap's resolved ROOT; macOS temporary paths are under the /var symlink.
+        self.temporary_path = Path(temporary.name).resolve()
         self.repo = self.temporary_path / "template"
         (self.repo / "scripts").mkdir(parents=True)
         for directory in ("App", "Tests", ".claude"):
