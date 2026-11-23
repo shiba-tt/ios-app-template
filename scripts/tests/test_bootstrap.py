@@ -172,6 +172,25 @@ if mode == "fail":
         self.assertIn("## Claude Code ハーネス\n", guide)
         self.assertIn("docs/claude-harness.md", guide)
         self.assertIn("## Claude Code ハーネス\n", self.read("README.md"))
+
+        # Generated apps may add their own skills, hooks, and rules without failing the harness tests.
+        custom_skill = self.repo / ".claude/skills/app-release/SKILL.md"
+        custom_skill.parent.mkdir()
+        custom_skill.write_text(
+            f"---\nname: app-release\ndescription: Release {APP_NAME} on iOS 27.2.\n---\n\nRun scripts/app_only.sh.\n",
+            encoding="utf-8",
+        )
+        (self.repo / ".claude/hooks/app_hook.py").write_text("import third_party_module\n", encoding="utf-8")
+        settings_path = self.repo / ".claude/settings.json"
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        settings["permissions"]["allow"].append("WebFetch(domain:example.com)")
+        settings["hooks"]["PostToolUse"].append({
+            "matcher": "Write",
+            "hooks": [{"type": "command", "command": "python3 .claude/hooks/app_hook.py"}],
+        })
+        settings["hooks"]["Stop"] = [{"hooks": [{"type": "command", "command": "true"}]}]
+        settings_path.write_text(json.dumps(settings), encoding="utf-8")
+
         result = subprocess.run(
             [sys.executable, "-m", "unittest", "discover", "-s", ".claude/tests", "-p", "test_*.py"],
             cwd=self.repo,

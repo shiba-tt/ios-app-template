@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CLAUDE = ROOT / ".claude"
 SKILLS = {"implement-feature", "verify-ios", "prepare-pr", "review-pr"}
 MANUAL_ONLY_SKILLS = {"prepare-pr", "review-pr"}
+HOOK_SCRIPTS = {"swift_format_check.py", "pr_reviewer_bash_guard.py", "git_approval_guard.py"}
 SKILL_FIELDS = {
     "name", "description", "when_to_use", "argument-hint", "arguments", "disable-model-invocation",
     "user-invocable", "allowed-tools", "disallowed-tools", "model", "effort", "context", "agent",
@@ -45,13 +46,18 @@ def frontmatter(path):
 
 
 def harness_documents():
-    return [*sorted((CLAUDE / "skills").glob("*/SKILL.md")), CLAUDE / "agents/pr-reviewer.md"]
+    """Return the bundled documents. Apps may add their own skills, which these rules do not cover."""
+    return [*(CLAUDE / "skills" / skill / "SKILL.md" for skill in sorted(SKILLS)), CLAUDE / "agents/pr-reviewer.md"]
+
+
+def hook_scripts():
+    return [CLAUDE / "hooks" / script for script in sorted(HOOK_SCRIPTS)]
 
 
 class SkillTests(unittest.TestCase):
-    def test_exactly_the_agreed_skills_exist(self):
+    def test_bundled_skills_exist(self):
         found = {path.parent.name for path in (CLAUDE / "skills").glob("*/SKILL.md")}
-        self.assertEqual(found, SKILLS)
+        self.assertLessEqual(SKILLS, found)
 
     def test_required_and_supported_frontmatter(self):
         for skill in SKILLS:
@@ -145,7 +151,7 @@ class SettingsTests(unittest.TestCase):
             self.assertTrue(rules)
             self.assertEqual(len(rules), len(set(rules)), key)
             for rule in rules:
-                self.assertRegex(rule, r"^(Bash|Read|Edit)\(.+\)$")
+                self.assertRegex(rule, r"^[A-Za-z][A-Za-z0-9_]*(\(.+\))?$")
 
     def test_bypass_is_not_enabled(self):
         self.assertNotIn("defaultMode", self.permissions)
@@ -220,32 +226,29 @@ class SettingsTests(unittest.TestCase):
 
     def test_hook_registration_is_lightweight(self):
         hooks = self.settings["hooks"]
-        self.assertEqual(set(hooks), {"PreToolUse", "PostToolUse"})
         for event, matcher, script in (
             ("PostToolUse", "Write|Edit", "swift_format_check.py"),
             ("PreToolUse", "Bash", "git_approval_guard.py"),
         ):
             with self.subTest(event=event):
-                self.assertEqual(len(hooks[event]), 1)
-                entry = hooks[event][0]
+                command = f'python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/{script}"'
+                registered = [
+                    (entry, handler)
+                    for entry in hooks[event]
+                    for handler in entry["hooks"]
+                    if handler.get("command") == command
+                ]
+                self.assertEqual(len(registered), 1)
+                entry, handler = registered[0]
                 self.assertEqual(entry["matcher"], matcher)
-                self.assertEqual(len(entry["hooks"]), 1)
-                handler = entry["hooks"][0]
                 self.assertEqual(handler["type"], "command")
-                self.assertEqual(handler["command"], f'python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/{script}"')
                 self.assertLessEqual(handler["timeout"], 30)
-                self.assertNotRegex(handler["command"], r"xcodebuild|check\.sh|--in-place")
                 self.assertTrue((CLAUDE / "hooks" / script).is_file())
 
 
 class HookScriptTests(unittest.TestCase):
     def test_scripts_parse_and_use_only_standard_library(self):
-        scripts = sorted((CLAUDE / "hooks").glob("*.py"))
-        self.assertEqual(
-            {path.name for path in scripts},
-            {"swift_format_check.py", "pr_reviewer_bash_guard.py", "git_approval_guard.py"},
-        )
-        for script in scripts:
+        for script in hook_scripts():
             with self.subTest(script=script.name):
                 tree = ast.parse(script.read_text(encoding="utf-8"))
                 imported = set()
@@ -278,7 +281,7 @@ class ReuseTests(unittest.TestCase):
                     self.assertTrue((ROOT / reference).exists(), reference)
 
     def test_harness_has_no_app_specific_values(self):
-        for document in [*harness_documents(), CLAUDE / "settings.json", *sorted((CLAUDE / "hooks").glob("*.py"))]:
+        for document in [*harness_documents(), CLAUDE / "settings.json", *hook_scripts()]:
             text = document.read_text(encoding="utf-8")
             with self.subTest(document=document.name):
                 self.assertNotIn("StarterApp", text)
@@ -289,7 +292,7 @@ class ReuseTests(unittest.TestCase):
         documents = [
             *harness_documents(),
             CLAUDE / "settings.json",
-            *sorted((CLAUDE / "hooks").glob("*.py")),
+            *hook_scripts(),
             ROOT / "docs/claude-harness.md",
         ]
         for document in documents:
