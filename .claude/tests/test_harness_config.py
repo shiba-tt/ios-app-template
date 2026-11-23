@@ -102,6 +102,15 @@ class SkillTests(unittest.TestCase):
         self.assertIn("./scripts/select_simulator.py --runtime", verify)
         self.assertIn("IOS_SIMULATOR_RUNTIME", verify)
 
+    def test_prepare_pr_runs_each_git_operation_separately(self):
+        prepare = (CLAUDE / "skills/prepare-pr/SKILL.md").read_text(encoding="utf-8")
+        section = prepare.split("### 承認後の実行\n", 1)[1].split("\n## ", 1)[0]
+        positions = [section.index(f"`{command}") for command in ("git add -- ", "git commit ", "git push ", "gh pr create ")]
+        self.assertEqual(positions, sorted(positions))
+        for separator in ("`&&`", "`;`", "`|`"):
+            self.assertIn(separator, section)
+        self.assertIn("commit と push を別々のコマンドで実行", prepare.split("## 5. CI 失敗時", 1)[1])
+
     def test_verification_skill_reports_every_check(self):
         verify = (CLAUDE / "skills/verify-ios/SKILL.md").read_text(encoding="utf-8")
         for check in ("swift-format", "SwiftLint", "XcodeGen", "Build", "Unit Test", "UI Test"):
