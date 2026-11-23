@@ -192,6 +192,14 @@ jobs:
           destination="$(./scripts/select_simulator.py --runtime "$IOS_SIMULATOR_RUNTIME")"
           printf 'destination=%s\n' "$destination" >> "$GITHUB_OUTPUT"
 
+      # XCTest allows 60 seconds for Xcode to launch the app. Boot before building so first-boot
+      # work does not overlap the launch request.
+      - name: Boot iOS Simulator
+        timeout-minutes: 5
+        env:
+          DESTINATION: ${{ steps.simulator.outputs.destination }}
+        run: xcrun simctl bootstatus "${DESTINATION##*id=}" -b
+
       - name: Build for Simulator
         timeout-minutes: 15
         env:
