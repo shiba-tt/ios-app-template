@@ -4,8 +4,17 @@
 
 ## テンプレートから新規アプリを作る
 
-1. GitHub で **Use this template → Create a new repository** を選び、生成したリポジトリをクローンします。
-2. [開発環境](#開発環境)をセットアップし、クローンしたリポジトリのルートで初期化します。初期化には Python 3 を使います。追加の Python パッケージは不要です。
+次の順に進めます。Ruleset を設定すると `main` へ直接 push できなくなるため、初期化結果の push を先に行います。
+
+1. リポジトリを作成してクローンします。GitHub で **Use this template → Create a new repository** を選ぶか、CLI で作成します。Private リポジトリでは、macOS Runner の実行が GitHub Actions の利用枠を消費します。
+
+   ```sh
+   gh repo create <REPOSITORY> --template shiba-tt/ios-app-template --private --clone
+   cd <REPOSITORY>
+   ```
+
+2. [開発環境](#開発環境)をセットアップします。
+3. クローンしたリポジトリのルートで初期化します。初期化には Python 3 を使います。追加の Python パッケージは不要です。
 
    ```sh
    mise exec -- ./scripts/bootstrap.sh
@@ -23,7 +32,28 @@
      --team-id "ABCDE12345"
    ```
 
-3. 生成された `.xcodeproj` を開き、[ビルドとテスト](#ビルドとテスト)を実施します。初期化による変更と `.bootstrap-complete` をコミットします。
+4. 生成された `.xcodeproj` を開き、[ビルドとテスト](#ビルドとテスト)を実施します。CLI では次のコマンドで全検証を実行できます。
+
+   ```sh
+   mise exec -- ./scripts/check.sh "$(./scripts/select_simulator.py --runtime 27.2)"
+   ```
+
+5. 初期化による変更と `.bootstrap-complete` をコミットし、`main` に push します。
+
+   ```sh
+   git add -A
+   git commit -m "chore: initialize app from template"
+   git push origin main
+   ```
+
+6. GitHub Actions の [CI](#ci) が成功したことを確認します。
+
+   ```sh
+   gh run list --branch main --limit 1
+   ```
+
+7. [GitHub Ruleset](#github-ruleset) を設定します。Ruleset はテンプレートからコピーされません。
+8. リポジトリで `claude` を起動してフォルダを信頼し、[Claude Code ハーネス](#claude-code-ハーネス)の手順で最初の機能を開発します。
 
 `--app-name` は Xcode の内部名です。画面上のアイコンラベルには `--display-name` を使います。省略時は内部名が使われます。対応デバイスは `iphone` または `universal`（iPhone と iPad）です。対話モードでは iPhone と iOS 26.0 が既定値です。全オプションは `./scripts/bootstrap.sh --help` で確認できます。
 
@@ -55,11 +85,21 @@ python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
 - Xcode の Settings → Components で iOS Simulator ランタイムをインストールしてください。
 - mise。[mise セットアップ](https://mise.jdx.dev/getting-started.html)
 
-Xcode を起動して初回セットアップを済ませ、対象の Xcode を選択します。複数バージョンがある場合はインストール先に合わせてパスを変更してください。
+Xcode を起動して初回セットアップを済ませ、表示されるバージョンが `.xcode-version` と一致することを確認します。
+
+```sh
+xcodebuild -version
+```
+
+一致しない場合は、`xcode-select` で固定した Xcode を選ぶか、インストール先に合わせて `DEVELOPER_DIR` を設定してから、もう一度確認します。
 
 ```sh
 export DEVELOPER_DIR=/Applications/Xcode_27.2.app/Contents/Developer
-xcodebuild -version
+```
+
+バージョンが一致したら、固定したツールをインストールします。
+
+```sh
 mise trust
 mise install
 ```
@@ -153,7 +193,7 @@ mise exec -- zizmor .
 
 ### GitHub Ruleset
 
-CI の成功を確認してから、`main` に次の設定を人が適用します。
+CI の成功を確認してから、GitHub の **Settings → Rules → Rulesets** で `main` に次の設定を人が適用します。Ruleset はテンプレートからコピーされないため、リポジトリごとに設定します。
 
 - Pull Request を必須にし、他者の Approve は必須にしません。
 - 必須ステータスチェックは `quality-and-security` と `ios-build-and-unit-tests` です。`ios-ui-tests` は Pull Request で実行しないため含めません。
