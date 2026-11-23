@@ -11,3 +11,9 @@ StarterApp は SwiftUI の iOS スターターです。初期 Bundle ID は `com
 - `mise exec -- xcodegen generate` でプロジェクトを生成します。設定変更は `project.yml` に反映します。
 - `mise exec -- ./scripts/check.sh 'platform=iOS Simulator,id=<SIMULATOR_UDID>'` でフォーマット、Lint、ビルド、両テストを検証します。個別の Lint は `mise exec -- swiftlint lint --strict` です。
 - 機能内に変更を閉じ、依存の組み立てはアプリの起点に集めます。詳細は [設計](.claude/rules/architecture.md)、[Swift](.claude/rules/swift.md)、[テスト](.claude/rules/testing.md) の共通ルールを参照してください。
+
+## Claude Code ハーネス
+
+- 機能開発は `implement-feature`、検証は `verify-ios` の `quick` / `full` を使います。PR 作成の `/prepare-pr` とレビューの `/review-pr` は、利用者が起動したときだけ使います。
+- commit、push、PR 作成、依存の追加は利用者の承認を得てから行います。PR はマージしません。
+- 運用手順は [Claude Code ハーネス](docs/claude-harness.md) を参照してください。

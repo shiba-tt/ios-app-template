@@ -110,7 +110,7 @@ GitHub Actions の [CI](.github/workflows/ci.yml) は、Pull Request、`main` �
 
 | ジョブ | Runner | Pull Request | `main` への push | 手動 quick | 手動 full |
 | --- | --- | --- | --- | --- | --- |
-| `quality-and-security`：Python / Shell 構文、actionlint、zizmor、テンプレートの回帰テスト | `ubuntu-24.04` | 実行 | 実行 | 実行 | 実行 |
+| `quality-and-security`：Python / Shell 構文、actionlint、zizmor、テンプレートの回帰テスト、Claude Code ハーネスのテスト | `ubuntu-24.04` | 実行 | 実行 | 実行 | 実行 |
 | `ios-build-and-unit-tests`：swift-format、SwiftLint、XcodeGen、ビルド、Swift Testing | `xcode-27` | 実行 | 実行 | 実行 | 実行 |
 | `ios-ui-tests`：XcodeGen、ビルド、XCUITest | `xcode-27` | スキップ | 実行 | スキップ | 実行 |
 
@@ -159,6 +159,30 @@ CI の成功を確認してから、`main` に次の設定を人が適用しま�
 - 必須ステータスチェックは `quality-and-security` と `ios-build-and-unit-tests` です。`ios-ui-tests` は Pull Request で実行しないため含めません。
 - Squash Merge を基本にします。
 
+## Claude Code ハーネス
+
+Claude Code に機能開発を依頼したときに、規約に沿った実装、検証、PR 作成、レビューを同じ手順で進めるための設定です。初期化後のアプリでもそのまま使えます。初回は `claude` を対話起動してフォルダを信頼してください。
+
+| Skill | 用途 | 起動 |
+| --- | --- | --- |
+| `implement-feature` | 機能の実装とテスト追加 | 手動・自動 |
+| `verify-ios` | `quick`（Unit Test まで）/ `full`（UI Test まで）の検証 | 手動・自動 |
+| `prepare-pr` | commit、push、PR 作成、CI 確認 | 手動のみ |
+| `review-pr` | `pr-reviewer` Subagent による読み取り専用レビュー | 手動のみ |
+
+```text
+設定画面を追加して
+/verify-ios quick
+/prepare-pr
+/review-pr 123
+```
+
+- **権限**：コード編集と指定した検証は自動で実行します。commit、push、PR 作成、依存の追加は承認が必要です。force push、PR のマージ、機密情報の読み取りは拒否します。
+- **Hooks**：Swift ファイルの編集後に `swift-format lint` の結果を伝え、Git / GitHub の状態を変える操作に承認を求めます。コードの書き換えやビルドは行いません。
+- **CI**：`quality-and-security` がハーネスの設定と Hook をテストします。Claude Code 本体は起動しないため、実際の動作は手動スモークテストで確認します。
+
+詳しい手順と制御の限界は [Claude Code ハーネス](docs/claude-harness.md)、設計判断は [ADR 0003](docs/adr/0003-claude-code-harness.md) を参照してください。
+
 ## 構成
 
 | パス | 内容 |
@@ -170,6 +194,9 @@ CI の成功を確認してから、`main` に次の設定を人が適用しま�
 | `scripts/select_xcode.sh`、`scripts/select_simulator.py` | CI の Xcode と Simulator の選択 |
 | `.github/` | GitHub Actions、Dependabot、actionlint の設定 |
 | `CLAUDE.md`、`.claude/rules/` | プロダクト情報と共通開発ルール |
+| `.claude/skills/`、`.claude/agents/` | Claude Code の作業手順とレビュー用 Subagent |
+| `.claude/hooks/`、`.claude/settings.json` | 軽量 Hook と権限設定 |
+| `.claude/tests/` | ハーネスのテスト |
 | `docs/adr/` | 設計判断の記録 |
 
 ## 開発とライセンス

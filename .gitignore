@@ -4,3 +4,5 @@ DerivedData/
 *.xcresult/
 .bootstrap-in-progress/
 __pycache__/
+.claude/settings.local.json
+.claude/worktrees/

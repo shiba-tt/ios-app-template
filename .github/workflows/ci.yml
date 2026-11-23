@@ -58,6 +58,10 @@ jobs:
         if: hashFiles('scripts/bootstrap.py') != ''
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
 
+      # Static checks and stubbed hook tests. Claude Code is not started and needs no API key.
+      - name: Run Claude Code harness tests
+        run: python3 -m unittest discover -s .claude/tests -p 'test_*.py' -v
+
       - name: Check Python syntax
         run: git ls-files -z '*.py' | xargs -0 -r python3 -m py_compile
 
@@ -122,6 +126,7 @@ jobs:
             --platform iphone \
             --deployment-target 26.0
           mise exec -- ./scripts/check.sh --stage generate
+          python3 -m unittest discover -s .claude/tests -p 'test_*.py' -v
 
       - name: Select iOS Simulator
         id: simulator
