@@ -178,7 +178,7 @@ Claude Code に機能開発を依頼したときに、規約に沿った実装�
 ```
 
 - **権限**：コード編集と指定した検証は自動で実行します。commit、push、PR 作成、依存の追加は承認が必要です。force push、PR のマージ、機密情報の読み取りは拒否します。
-- **Hooks**：Swift ファイルの編集後に `swift-format lint` の結果を伝え、Git / GitHub の状態を変える操作に承認を求めます。コードの書き換えやビルドは行いません。
+- **Hooks**：Swift ファイルの編集後に `swift-format lint` の結果を伝え、読み取り専用以外の Git / GitHub 操作に承認を求めます。コードの書き換えやビルドは行いません。
 - **CI**：`quality-and-security` がハーネスの設定と Hook をテストします。Claude Code 本体は起動しないため、実際の動作は手動スモークテストで確認します。
 
 詳しい手順と制御の限界は [Claude Code ハーネス](docs/claude-harness.md)、設計判断は [ADR 0003](docs/adr/0003-claude-code-harness.md) を参照してください。

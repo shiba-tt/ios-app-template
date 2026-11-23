@@ -20,7 +20,8 @@ ALLOW_REASON = "pr-reviewer の読み取り専用コマンドです。"
 # Unquoted characters that would make the shell do more than run a single argument list.
 SHELL_SYNTAX = set(";&|<>()$`\\{}*?[]#!")
 
-PR_TARGET = re.compile(r"[1-9][0-9]*|https://github\.com/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/pull/[1-9][0-9]*/?")
+# A URL could name another repository, so only numbers that gh resolves in this repository pass.
+PR_TARGET = re.compile(r"[1-9][0-9]*")
 RUN_ID = re.compile(r"[1-9][0-9]*")
 API_PATH = re.compile(
     r"repos/\{owner\}/\{repo\}/(?:contents|pulls|commits|compare)"
@@ -28,8 +29,8 @@ API_PATH = re.compile(
 )
 API_ACCEPT = re.compile(r"Accept: application/vnd\.github[a-z0-9.+-]*")
 
-# Each flag maps to whether it consumes a value.
-OUTPUT_FLAGS = {"--json": True, "--jq": True, "-q": True}
+# Each flag maps to whether it consumes a value. --jq is excluded because jq can read env secrets.
+OUTPUT_FLAGS = {"--json": True}
 GH_COMMANDS = {
     ("pr", "view"): ({**OUTPUT_FLAGS, "--comments": False, "-c": False}, PR_TARGET),
     ("pr", "diff"): ({"--name-only": False, "--patch": False}, PR_TARGET),
@@ -46,7 +47,7 @@ GH_COMMANDS = {
     ),
     ("repo", "view"): (OUTPUT_FLAGS, None),
 }
-GH_API_FLAGS = {"--jq": True, "-q": True, "--paginate": False, "-H": True, "--header": True}
+GH_API_FLAGS = {"--paginate": False, "-H": True, "--header": True}
 
 GIT_COMMANDS = {"status", "diff", "log", "show", "rev-parse", "ls-files", "blame", "merge-base", "grep"}
 # Git accepts abbreviated long options, so flags are matched exactly instead of denylisted.

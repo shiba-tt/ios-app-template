@@ -73,7 +73,7 @@ Severity は Critical、High、Medium、Low です。問題がなければ「指
 
 ### 制御の限界
 
-- 権限ルールはコマンドの文字列で照合します。`PreToolUse` Hook が `git -C . push` や `sh -c 'git push'` などの代表的な迂回も承認対象にしますが、任意のプログラムから実行される操作までは検出できません。
+- 権限ルールはコマンドの文字列で照合します。`PreToolUse` Hook がコマンドを解析し、`git -C . push`、`gh -R owner/repo pr merge`、`sh -c 'git push'` などの迂回も承認対象にしますが、任意のプログラムから実行される操作までは検出できません。
 - `deny` は Claude が認識するファイル読み取りを止めますが、任意のプロセスが開くファイルまでは止められません。強い隔離が必要な場合は Claude Code の Sandbox を併用してください。
 - `check.sh` は編集後のアプリとテストのコードを実行します。Simulator はセキュリティ境界ではありません。
 - auto モードでは Subagent の `permissionMode` が無視されます。`pr-reviewer` の読み取り専用は、利用可能なツールの限定と Bash の許可リスト Hook で維持します。
@@ -83,8 +83,8 @@ Severity は Critical、High、Medium、Low です。問題がなければ「指
 | イベント | 対象 | 処理 |
 | --- | --- | --- |
 | `PostToolUse` | `App/`、`Tests/` の Swift ファイル | `swift-format lint` の結果を Claude に伝える。修正やブロックはしない |
-| `PreToolUse` | Bash | Git / GitHub の状態を変える操作に承認を要求する |
-| `PreToolUse`（`pr-reviewer` のみ） | Bash | 読み取り専用の `git` / `gh` 以外を拒否する |
+| `PreToolUse` | Bash | コマンドを解析し、読み取り専用の一覧にない `git` / `gh` 操作に承認を要求する。`git add`、`git fetch`、`git switch` も対象 |
+| `PreToolUse`（`pr-reviewer` のみ） | Bash | 読み取り専用の `git` / `gh` 以外を拒否する。環境変数を読める `--jq` と、別リポジトリを指定できる URL も拒否する |
 
 Hook は Xcode のビルドやテストを実行しません。実行時間に上限があり、再試行もしません。
 

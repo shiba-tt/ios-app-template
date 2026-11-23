@@ -307,8 +307,82 @@ class GitApprovalGuardTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(self.decision(command), "ask")
 
+    def test_requires_approval_for_parser_differentials(self):
+        for command in (
+            "gh -R octo/app pr merge 1",
+            "gh pr -R octo/app merge 1",
+            "gh pr --repo=octo/app create --fill",
+            "gh --repo octo/app pr comment 1 --body x",
+            "gh api -iX POST repos/octo/app/pulls",
+            "gh api 'repos/a|b' -X POST",
+            "gh api repos/octo/app/pulls -H 'X-HTTP-Method-Override: POST'",
+            'git -C "a b" push',
+            "git --config-env=core.pager=X log",
+            "git --exec-path=/tmp/evil status",
+            "git --namespace x push",
+            "env git --git-dir .git push",
+            "$g push",
+            "git${IFS}push",
+            "$(echo git) push",
+            'echo "$(git push)"',
+            "GIT_SSH_COMMAND=evil git status",
+            "GIT_EXTERNAL_DIFF=evil git diff",
+            "git \\\npush",
+            "/usr/lib/git-core/git-push origin",
+            "git log 'unterminated",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(self.decision(command), "ask")
+
+    def test_requires_approval_for_commands_outside_the_read_only_list(self):
+        for command in (
+            "git add .",
+            "git checkout main",
+            "git switch main",
+            "git fetch origin",
+            "git branch -D main",
+            "git branch new-branch",
+            "git remote add other https://example.invalid/repo.git",
+            "git diff --output=/tmp/x",
+            "git diff --outp=/tmp/x",
+            "git log --ext-diff",
+            "git grep -Oevil pattern",
+            "git grep --open-files-in-pager=evil pattern",
+            "gh auth token",
+            "gh alias set x y",
+            "gh extension install octo/extension",
+            "gh pr checkout 1",
+            "gh run download 1",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(self.decision(command), "ask")
+
+    def test_requires_approval_when_jq_reads_the_environment(self):
+        for command in (
+            "gh pr view 1 --json title --jq env",
+            "gh pr view 1 --json title --jq=env.GH_TOKEN",
+            "gh pr view 1 --json title -q '$ENV'",
+            "gh pr view 1 --json title -q'$ENV.GH_TOKEN'",
+            "gh pr view 1 --json title -cq env",
+            "gh api 'repos/{owner}/{repo}/pulls' --jq 'env | keys'",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(self.decision(command), "ask")
+
     def test_leaves_read_only_and_unrelated_commands_alone(self):
         for command in (
+            "git -C . status",
+            "git --no-pager log -1",
+            "git remote -v",
+            "git branch --list",
+            "git rev-list --count HEAD",
+            "git grep -n 'pattern' -- App",
+            "git log --oneline | head -3",
+            "grep -n git README.md",
+            "which git",
+            "gh repo view --json nameWithOwner",
+            "gh pr view 1 --json title --jq .title",
+            'destination="$(./scripts/select_simulator.py --runtime 1.0)"',
             "git status --short",
             "git diff --stat",
             "git log --oneline -- scripts/push.sh",
@@ -369,8 +443,7 @@ class PullRequestReviewerGuardTests(unittest.TestCase):
         for command in (
             "gh pr view",
             "gh pr view 123 --json title,body,headRefOid,baseRefName,files",
-            "gh pr view https://github.com/octo/app/pull/9 --comments",
-            "gh pr view 12 --json files --jq '.files[] | .path'",
+            "gh pr view 9 --comments",
             "gh pr diff 123",
             "gh pr diff 123 --name-only",
             "gh pr checks 123 --json name,state,link",
@@ -379,7 +452,7 @@ class PullRequestReviewerGuardTests(unittest.TestCase):
             "gh run list --branch feature/x --limit 5 --json databaseId,headSha,status",
             "gh repo view --json nameWithOwner",
             "gh api 'repos/{owner}/{repo}/contents/App/My%20View.swift?ref=abc123' -H 'Accept: application/vnd.github.raw'",
-            "gh api 'repos/{owner}/{repo}/pulls/12/files?per_page=100' --paginate --jq '.[].filename'",
+            "gh api 'repos/{owner}/{repo}/pulls/12/files?per_page=100' --paginate",
             "git status --short",
             "git branch --show-current",
             "git rev-parse HEAD",
@@ -461,6 +534,18 @@ class PullRequestReviewerGuardTests(unittest.TestCase):
             "gh pr view 1 --repo other/repo",
             "gh pr view not-a-number",
             "gh pr view https://evil.example/octo/app/pull/1",
+            "gh pr view https://github.com/other/private/pull/1",
+            "gh pr diff https://github.com/other/private/pull/1",
+            "gh pr checks https://github.com/other/private/pull/1",
+            "gh pr view 1 --json title --jq env",
+            "gh pr view 1 --json title --jq=env.GH_TOKEN",
+            "gh pr view 1 --json title -q '$ENV'",
+            "gh pr checks 1 --json name --jq env",
+            "gh run view 1 --json jobs --jq env",
+            "gh run list --json name --jq env",
+            "gh repo view --json name --jq env",
+            "gh api 'repos/{owner}/{repo}/pulls/1' --jq env",
+            "gh api 'repos/{owner}/{repo}/pulls/1' -q env",
             "gh run view --web 1",
             "gh api repos/octo/app/pulls/1",
             "gh api graphql -f query=x",
