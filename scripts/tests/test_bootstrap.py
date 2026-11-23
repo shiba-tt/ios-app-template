@@ -29,10 +29,16 @@ class BootstrapTests(unittest.TestCase):
         self.temporary_path = Path(temporary.name).resolve()
         self.repo = self.temporary_path / "template"
         (self.repo / "scripts").mkdir(parents=True)
-        for directory in ("App", "Tests", ".claude"):
+        for directory in ("App", "Tests", ".github", "docs"):
             shutil.copytree(TEMPLATE / directory, self.repo / directory)
+        # Local session data under .claude is not part of the template.
+        shutil.copytree(
+            TEMPLATE / ".claude", self.repo / ".claude",
+            ignore=shutil.ignore_patterns("__pycache__", "worktrees", "settings.local.json"),
+        )
         for filename in ("project.yml", "README.md", "CLAUDE.md", "LICENSE",
-                         "scripts/bootstrap.sh", "scripts/bootstrap.py", "scripts/check.sh"):
+                         "scripts/bootstrap.sh", "scripts/bootstrap.py", "scripts/check.sh",
+                         "scripts/select_simulator.py", "scripts/select_xcode.sh"):
             shutil.copy2(TEMPLATE / filename, self.repo / filename)
         shutil.copytree(TEMPLATE / "scripts/tests", self.repo / "scripts/tests",
                         ignore=shutil.ignore_patterns("__pycache__"))
@@ -152,12 +158,49 @@ if mode == "fail":
         self.assertTrue((self.repo / "scripts/check.sh").is_file())
         self.assertNotIn("StarterApp", project)
         for path, content in self.before.items():
-            if path.parts[:2] == (".claude", "rules") and content is not None:
+            if path.parts[0] == ".claude" and content is not None:
                 self.assertEqual((self.repo / path).read_bytes(), content)
 
         self.assertTrue((self.repo / PROJECT_NAME / "project.pbxproj").is_file())
         self.assertEqual(self.read(".bootstrap-complete"), "initialized\n")
         self.assertFalse((self.repo / ".bootstrap-in-progress").exists())
+
+    def test_initialized_app_keeps_a_working_claude_harness(self):
+        self.assert_success(self.bootstrap(*self.options()))
+        guide = self.read("CLAUDE.md")
+        self.assertIn(APP_NAME, guide)
+        self.assertIn("## Claude Code ハーネス\n", guide)
+        self.assertIn("docs/claude-harness.md", guide)
+        self.assertIn("## Claude Code ハーネス\n", self.read("README.md"))
+
+        # Generated apps may add their own skills, hooks, and rules without failing the harness tests.
+        custom_skill = self.repo / ".claude/skills/app-release/SKILL.md"
+        custom_skill.parent.mkdir()
+        custom_skill.write_text(
+            f"---\nname: app-release\ndescription: Release {APP_NAME} on iOS 27.2.\n---\n\nRun scripts/app_only.sh.\n",
+            encoding="utf-8",
+        )
+        (self.repo / ".claude/hooks/app_hook.py").write_text("import third_party_module\n", encoding="utf-8")
+        settings_path = self.repo / ".claude/settings.json"
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        settings["permissions"]["allow"].append("WebFetch(domain:example.com)")
+        settings["hooks"]["PostToolUse"].append({
+            "matcher": "Write",
+            "hooks": [{"type": "command", "command": "python3 .claude/hooks/app_hook.py"}],
+        })
+        settings["hooks"]["Stop"] = [{"hooks": [{"type": "command", "command": "true"}]}]
+        settings_path.write_text(json.dumps(settings), encoding="utf-8")
+
+        result = subprocess.run(
+            [sys.executable, "-m", "unittest", "discover", "-s", ".claude/tests", "-p", "test_*.py"],
+            cwd=self.repo,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=60,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_universal_and_custom_display_name(self):
         self.assert_success(self.bootstrap(*self.options(**{

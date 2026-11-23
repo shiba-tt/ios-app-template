@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "disableBypassPermissionsMode": "disable",
+    "allow": [
+      "Edit(/App/**)",
+      "Edit(/Tests/**)",
+      "Edit(/docs/**)",
+      "Bash(./scripts/select_simulator.py --runtime *)",
+      "Bash(mise exec -- ./scripts/check.sh --stage quality)",
+      "Bash(mise exec -- ./scripts/check.sh --stage generate)",
+      "Bash(mise exec -- ./scripts/check.sh --tests unit 'platform=iOS Simulator,id=*')",
+      "Bash(mise exec -- ./scripts/check.sh 'platform=iOS Simulator,id=*')",
+      "Bash(mise exec -- swiftlint lint --strict)",
+      "Bash(mise exec -- xcodegen generate)",
+      "Bash(xcrun swift-format lint --strict --recursive App Tests)",
+      "Bash(xcrun simctl list *)",
+      "Bash(python3 -m unittest discover -s .claude/tests -p 'test_*.py' -v)",
+      "Bash(gh pr view *)",
+      "Bash(gh pr diff *)",
+      "Bash(gh pr checks *)",
+      "Bash(gh run view *)",
+      "Bash(gh run list *)"
+    ],
+    "ask": [
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git merge *)",
+      "Bash(git rebase *)",
+      "Bash(git cherry-pick *)",
+      "Bash(git revert *)",
+      "Bash(git tag *)",
+      "Bash(git reset *)",
+      "Bash(git restore *)",
+      "Bash(git rm *)",
+      "Bash(git stash *)",
+      "Bash(git config *)",
+      "Bash(gh pr create *)",
+      "Bash(gh pr edit *)",
+      "Bash(gh pr ready *)",
+      "Bash(gh pr close *)",
+      "Bash(gh pr reopen *)",
+      "Bash(gh pr comment *)",
+      "Bash(gh pr review *)",
+      "Bash(gh run rerun *)",
+      "Bash(gh run cancel *)",
+      "Bash(gh workflow run *)",
+      "Bash(gh release *)",
+      "Bash(mise use *)",
+      "Bash(mise install *)",
+      "Bash(mise upgrade *)",
+      "Bash(swift package *)",
+      "Bash(brew *)",
+      "Bash(pip *)",
+      "Bash(pip3 *)",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(gem *)",
+      "Bash(pod *)",
+      "Bash(carthage *)",
+      "Edit(/project.yml)",
+      "Edit(/mise.toml)",
+      "Edit(/.xcode-version)",
+      "Edit(/.swift-format)",
+      "Edit(/.swiftlint.yml)",
+      "Edit(/.gitignore)",
+      "Edit(/CLAUDE.md)",
+      "Edit(/.claude/**)",
+      "Edit(/.github/**)",
+      "Edit(/scripts/**)",
+      "Edit(**/Package.swift)",
+      "Edit(**/Package.resolved)",
+      "Edit(**/Podfile)",
+      "Edit(**/Cartfile)"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * --force*)",
+      "Bash(git push * -f)",
+      "Bash(git push * -f *)",
+      "Bash(git push --mirror*)",
+      "Bash(git push * --mirror*)",
+      "Bash(git push --delete *)",
+      "Bash(git push * --delete *)",
+      "Bash(git push -d *)",
+      "Bash(git push * -d *)",
+      "Bash(git push * +*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean *)",
+      "Bash(git branch -D *)",
+      "Bash(git filter-branch *)",
+      "Bash(gh pr merge *)",
+      "Bash(gh repo delete *)",
+      "Bash(gh release delete *)",
+      "Bash(gh secret *)",
+      "Bash(gh auth token*)",
+      "Bash(sudo *)",
+      "Bash(rm -rf *)",
+      "Bash(rm -fr *)",
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/*.p12)",
+      "Read(**/*.p8)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/*.mobileprovision)",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.netrc)",
+      "Read(~/.config/gh/**)",
+      "Read(~/.appstoreconnect/**)",
+      "Edit(**/.env)",
+      "Edit(**/.env.*)",
+      "Edit(**/*.p12)",
+      "Edit(**/*.p8)",
+      "Edit(**/*.pem)",
+      "Edit(**/*.key)",
+      "Edit(**/*.mobileprovision)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/git_approval_guard.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/swift_format_check.py\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}
