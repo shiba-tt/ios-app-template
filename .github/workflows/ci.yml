@@ -1,0 +1,225 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Validation mode"
+        required: true
+        type: choice
+        options:
+          - quick
+          - full
+        default: quick
+
+permissions:
+  contents: read
+
+# Only pull requests share a group. Every push and manual run gets its own group.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('{0}-pr-{1}', github.workflow, github.event.pull_request.number) || format('{0}-run-{1}', github.workflow, github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Update with .xcode-version. A missing runtime fails instead of using another iOS version.
+  IOS_SIMULATOR_RUNTIME: "27.2"
+  MISE_VERSION: "2026.11.8"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  quality-and-security:
+    name: quality-and-security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      # mise.toml includes macOS-only tools. Run only the linters installed below.
+      MISE_EXEC_AUTO_INSTALL: "false"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install workflow linters
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+        with:
+          version: ${{ env.MISE_VERSION }}
+          cache: false
+          install_args: aqua:rhysd/actionlint aqua:zizmorcore/zizmor
+
+      - name: Run template regression tests
+        if: hashFiles('scripts/bootstrap.py') != ''
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
+
+      - name: Check Python syntax
+        run: git ls-files -z '*.py' | xargs -0 -r python3 -m py_compile
+
+      - name: Check shell syntax
+        run: git ls-files -z '*.sh' | xargs -0 -r -n 1 bash -n
+
+      - name: Run actionlint
+        run: mise exec -- actionlint -color
+
+      - name: Run zizmor
+        env:
+          # Read-only token for online audits such as impostor commits and known-vulnerable actions.
+          GH_TOKEN: ${{ github.token }}
+        run: mise exec -- zizmor --format=github .
+
+  ios-build-and-unit-tests:
+    name: ios-build-and-unit-tests
+    # macos-26 tops out at Xcode 26.6. xcode-27 is the hosted image that includes Xcode 27.2.
+    runs-on: xcode-27
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Select Xcode from .xcode-version
+        run: |
+          developer_dir="$(./scripts/select_xcode.sh)"
+          printf 'DEVELOPER_DIR=%s\n' "$developer_dir" >> "$GITHUB_ENV"
+
+      - name: Install tools from mise.toml
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+        with:
+          version: ${{ env.MISE_VERSION }}
+          cache: false
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcrun swift-format --version
+          mise exec -- xcodegen --version
+          mise exec -- swiftlint version
+
+      - name: Check Swift format and lint
+        run: mise exec -- ./scripts/check.sh --stage quality
+
+      - name: Generate and verify Xcode project
+        run: mise exec -- ./scripts/check.sh --stage generate
+
+      - name: Verify initialization in a temporary copy
+        if: hashFiles('scripts/bootstrap.py') != ''
+        run: |
+          smoke_dir="$RUNNER_TEMP/initialization-smoke"
+          mkdir -p "$smoke_dir"
+          git archive HEAD | tar -x -C "$smoke_dir"
+          cd "$smoke_dir"
+          mise trust --quiet
+          mise exec -- ./scripts/bootstrap.sh \
+            --app-name CISmokeApp \
+            --bundle-id com.example.cismoke \
+            --platform iphone \
+            --deployment-target 26.0
+          mise exec -- ./scripts/check.sh --stage generate
+
+      - name: Select iOS Simulator
+        id: simulator
+        run: |
+          destination="$(./scripts/select_simulator.py --runtime "$IOS_SIMULATOR_RUNTIME")"
+          printf 'destination=%s\n' "$destination" >> "$GITHUB_OUTPUT"
+
+      - name: Build for Simulator
+        timeout-minutes: 15
+        env:
+          DESTINATION: ${{ steps.simulator.outputs.destination }}
+        run: mise exec -- ./scripts/check.sh --stage build --ci-output "$RUNNER_TEMP/ci-diagnostics" "$DESTINATION"
+
+      - name: Run unit tests
+        timeout-minutes: 20
+        env:
+          DESTINATION: ${{ steps.simulator.outputs.destination }}
+        run: mise exec -- ./scripts/check.sh --stage test --tests unit --ci-output "$RUNNER_TEMP/ci-diagnostics" "$DESTINATION"
+
+      - name: Collect environment diagnostics
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/ci-diagnostics"
+          {
+            xcodebuild -version || true
+            xcrun simctl list runtimes || true
+            xcrun simctl list devices available || true
+          } > "$RUNNER_TEMP/ci-diagnostics/environment.txt" 2>&1
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-build-and-unit-tests-diagnostics-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-diagnostics
+          retention-days: 7
+          if-no-files-found: ignore
+
+  ios-ui-tests:
+    name: ios-ui-tests
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.mode == 'full')
+    # macos-26 tops out at Xcode 26.6. xcode-27 is the hosted image that includes Xcode 27.2.
+    runs-on: xcode-27
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Select Xcode from .xcode-version
+        run: |
+          developer_dir="$(./scripts/select_xcode.sh)"
+          printf 'DEVELOPER_DIR=%s\n' "$developer_dir" >> "$GITHUB_ENV"
+
+      - name: Install tools from mise.toml
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
+        with:
+          version: ${{ env.MISE_VERSION }}
+          cache: false
+
+      - name: Generate and verify Xcode project
+        run: mise exec -- ./scripts/check.sh --stage generate
+
+      - name: Select iOS Simulator
+        id: simulator
+        run: |
+          destination="$(./scripts/select_simulator.py --runtime "$IOS_SIMULATOR_RUNTIME")"
+          printf 'destination=%s\n' "$destination" >> "$GITHUB_OUTPUT"
+
+      - name: Build for Simulator
+        timeout-minutes: 15
+        env:
+          DESTINATION: ${{ steps.simulator.outputs.destination }}
+        run: mise exec -- ./scripts/check.sh --stage build --ci-output "$RUNNER_TEMP/ci-diagnostics" "$DESTINATION"
+
+      # Step timeouts stay below the job timeout so the failure-only diagnostics steps still run.
+      - name: Run UI tests
+        timeout-minutes: 35
+        env:
+          DESTINATION: ${{ steps.simulator.outputs.destination }}
+        run: mise exec -- ./scripts/check.sh --stage test --tests ui --ci-output "$RUNNER_TEMP/ci-diagnostics" "$DESTINATION"
+
+      - name: Collect environment diagnostics
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/ci-diagnostics"
+          {
+            xcodebuild -version || true
+            xcrun simctl list runtimes || true
+            xcrun simctl list devices available || true
+          } > "$RUNNER_TEMP/ci-diagnostics/environment.txt" 2>&1
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-ui-tests-diagnostics-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ci-diagnostics
+          retention-days: 7
+          if-no-files-found: ignore

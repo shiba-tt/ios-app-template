@@ -47,7 +47,7 @@ Deployment Target はプロジェクトごとに設定できます。bootstrap �
 python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
 ```
 
-実際のプロジェクト生成は、新規クローンで bootstrap を実行するか、既存の設定で `mise exec -- xcodegen generate` を実行して確認します。
+実際のプロジェクト生成は、新規クローンで bootstrap を実行するか、既存の設定で `mise exec -- xcodegen generate` を実行して確認します。CI は同じ回帰テストに加え、一時ディレクトリで別のアプリ名と Bundle ID に初期化し、実際の XcodeGen で生成できることを確認します。
 
 ## 開発環境
 
@@ -104,6 +104,61 @@ mise exec -- swiftlint lint --strict
 
 swift-format がレイアウトと表記を扱い、SwiftLint は強制キャストや不適切な初期化などを検出します。Swift Concurrency の診断は Swift 6 コンパイラに従います。
 
+## CI
+
+GitHub Actions の [CI](.github/workflows/ci.yml) は、Pull Request、`main` への push、手動実行で動きます。設計判断は [ADR 0002](docs/adr/0002-ios-ci-foundation.md) に記録しています。
+
+| ジョブ | Runner | Pull Request | `main` への push | 手動 quick | 手動 full |
+| --- | --- | --- | --- | --- | --- |
+| `quality-and-security`：Python / Shell 構文、actionlint、zizmor、テンプレートの回帰テスト | `ubuntu-24.04` | 実行 | 実行 | 実行 | 実行 |
+| `ios-build-and-unit-tests`：swift-format、SwiftLint、XcodeGen、ビルド、Swift Testing | `xcode-27` | 実行 | 実行 | 実行 | 実行 |
+| `ios-ui-tests`：XcodeGen、ビルド、XCUITest | `xcode-27` | スキップ | 実行 | スキップ | 実行 |
+
+同じ Pull Request に新しいコミットを push すると、古い実行だけをキャンセルします。`main` への push と手動実行はキャンセルしません。
+
+手動実行は、ワークフローがデフォルトブランチに存在するようになると使えます。PR のブランチも指定できます。
+
+```sh
+gh workflow run ci.yml --ref <BRANCH> -f mode=full
+```
+
+### ローカルでの検証
+
+Pull Request と同じ Swift の検証は `--tests unit`、UI Test まで含める場合はオプションなしで実行します。
+
+```sh
+destination="$(./scripts/select_simulator.py --runtime 27.2)"
+mise exec -- ./scripts/check.sh --tests unit "$destination"
+mise exec -- ./scripts/check.sh "$destination"
+mise exec -- actionlint
+mise exec -- zizmor .
+```
+
+### CI が失敗したとき
+
+1. GitHub の **Actions** で失敗したステップのログを確認します。`Show toolchain` と `Select iOS Simulator` に、使用した Xcode、機種、Runtime、UDID が出力されます。
+2. 失敗した macOS ジョブの診断情報を取得します。Artifact は失敗時のみ作成され、7 日間保持されます。
+
+   ```sh
+   gh run download <RUN_ID> --name ios-build-and-unit-tests-diagnostics-<RUN_ATTEMPT>
+   ```
+
+3. `build.log`、`test-*.log`、`environment.txt` を確認します。`.xcresult` は Xcode で開くか、CLI で要約を表示します。UI Test のスクリーンショットも `.xcresult` に含まれます。
+
+   ```sh
+   xcrun xcresulttool get test-results summary --path test-unit.xcresult
+   ```
+
+4. Xcode が見つからないエラーは、`.xcode-version` と [Runner イメージ](https://github.com/actions/runner-images#available-images)の内容を比較します。CI は別の Xcode や iOS Runtime に切り替えません。Xcode を更新するときは `.xcode-version`、`project.yml` の `options.xcodeVersion`、`ci.yml` の `IOS_SIMULATOR_RUNTIME` を揃えます。
+
+### GitHub Ruleset
+
+CI の成功を確認してから、`main` に次の設定を人が適用します。
+
+- Pull Request を必須にし、他者の Approve は必須にしません。
+- 必須ステータスチェックは `quality-and-security` と `ios-build-and-unit-tests` です。`ios-ui-tests` は Pull Request で実行しないため含めません。
+- Squash Merge を基本にします。
+
 ## 構成
 
 | パス | 内容 |
@@ -111,12 +166,14 @@ swift-format がレイアウトと表記を扱い、SwiftLint は強制キャス
 | `App/AppEntry.swift` | SwiftUI のエントリポイントと Composition Root |
 | `App/Features/Home/` | 起動画面 |
 | `Tests/Unit/`、`Tests/UI/` | Swift Testing と XCUITest |
-| `scripts/check.sh` | ローカル検証 |
+| `scripts/check.sh` | ローカルと CI の共通検証 |
+| `scripts/select_xcode.sh`、`scripts/select_simulator.py` | CI の Xcode と Simulator の選択 |
+| `.github/` | GitHub Actions、Dependabot、actionlint の設定 |
 | `CLAUDE.md`、`.claude/rules/` | プロダクト情報と共通開発ルール |
 | `docs/adr/` | 設計判断の記録 |
 
 ## 開発とライセンス
 
-`main` を安定ブランチとし、短命ブランチから PR を作り、Squash Merge します。配布、CI、永続化、アプリアイコンはプロダクトに合わせて追加します。
+`main` を安定ブランチとし、短命ブランチから PR を作り、Squash Merge します。配布、永続化、アプリアイコンはプロダクトに合わせて追加します。
 
 テンプレート由来コードを再利用・配布する場合は、著作権表示と許諾文を含む [MIT ライセンス](LICENSE)を保持してください。

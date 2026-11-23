@@ -1,0 +1,5 @@
+self-hosted-runner:
+  labels:
+    # GitHub-hosted preview image that actionlint 1.7.12 does not know yet. It is not self-hosted.
+    # Remove this entry when actionlint recognizes the label.
+    - xcode-27
