@@ -3,3 +3,4 @@
 | ADR | Status |
 | --- | --- |
 | [0001 — 初期 iOS アーキテクチャ](0001-initial-architecture.md) | Accepted |
+| [0002 — iOS CI 基盤](0002-ios-ci-foundation.md) | Accepted |

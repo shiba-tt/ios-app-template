@@ -1,4 +1,7 @@
 [tools]
 "aqua:yonaskolb/XcodeGen" = "2.48.0"
 "aqua:realm/SwiftLint" = "0.65.1"
+# GitHub Actions linters used by CI and for local workflow checks.
+"aqua:rhysd/actionlint" = "1.7.12"
+"aqua:zizmorcore/zizmor" = "1.32.0"
 # swift-format ships with the Xcode selected in .xcode-version.
